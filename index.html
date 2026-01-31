@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PranWorld Blog</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<style>
+body{margin:0;font-family:Arial;background:#f4f5f7}
+.cover{height:150px;background:url("https://images.unsplash.com/photo-1444703686981-a3abbc4d4fe3") center/cover}
+.profile-card{background:#fff;margin:-45px 15px 15px;padding:15px;border-radius:14px;box-shadow:0 4px 10px rgba(0,0,0,.1)}
+.profile-row{display:flex;align-items:center}
+.profile-pic{width:60px;height:60px;border-radius:10px;object-fit:cover;background:#ddd;margin-right:10px}
+.profile-name{font-weight:bold}
+.profile-sub{font-size:12px;color:#666}
+.subscribe-btn{margin-left:auto;background:#1da1f2;color:#fff;border:none;padding:8px 14px;border-radius:20px;cursor:pointer}
+.stats{display:flex;margin-top:10px}
+.stats div{flex:1;text-align:center}
+.add-btn{margin:15px;background:#1da1f2;color:#fff;text-align:center;padding:12px;border-radius:12px;cursor:pointer}
+.blog{background:#fff;margin:15px;padding:15px;border-radius:14px;box-shadow:0 3px 8px rgba(0,0,0,.1)}
+.blog-head{display:flex;align-items:center}
+.blog-head img{width:40px;height:40px;border-radius:8px;margin-right:8px}
+.blog-date{font-size:12px;color:#777}
+.actions{display:flex;justify-content:space-around;margin-top:10px;cursor:pointer}
+#loginModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);justify-content:center;align-items:center;z-index:9999}
+.login-box{background:#fff;padding:20px;border-radius:12px;text-align:center}
+</style>
+</head>
+
+<body>
+
+<div class="cover"></div>
+
+<div class="profile-card">
+  <div class="profile-row">
+    <img id="profilePic" class="profile-pic">
+    <div>
+      <div class="profile-name">Pranit Helge · Blog</div>
+      <div class="profile-sub">PranWorld</div>
+    </div>
+    <button class="subscribe-btn" onclick="requireLogin(()=>alert('Subscribed!'))">Subscribe</button>
+  </div>
+
+  <input id="photoInput" type="file" accept="image/*" onchange="uploadProfile(this)">
+
+  <div class="stats">
+    <div><b id="entryCount">0</b><br>Entries</div>
+    <div><b>0</b><br>Subscribers</div>
+  </div>
+</div>
+
+<div class="add-btn" onclick="addBlog()">+ Add Today's Blog</div>
+<div id="blogs"></div>
+
+<!-- LOGIN MODAL -->
+<div id="loginModal">
+  <div class="login-box">
+    <h3>Login Required</h3>
+    <div id="googleBtn"></div>
+    <button onclick="loginModal.style.display='none'">Cancel</button>
+  </div>
+</div>
+
+<script>
+/* ELEMENTS */
+const blogsDiv = document.getElementById("blogs");
+const entryCount = document.getElementById("entryCount");
+const profilePic = document.getElementById("profilePic");
+const photoInput = document.getElementById("photoInput");
+const loginModal = document.getElementById("loginModal");
+
+/* DATA */
+let blogs = JSON.parse(localStorage.getItem("blogs")) || [];
+let user = JSON.parse(localStorage.getItem("user"));
+let pendingAction = null;
+
+/* PROFILE IMAGE */
+const savedProfile = localStorage.getItem("profileImage");
+if(savedProfile){
+  profilePic.src = savedProfile;
+  photoInput.style.display = "none";
+}else{
+  profilePic.src = "https://via.placeholder.com/60";
+}
+
+function uploadProfile(input){
+  if(input.files[0].size > 2_000_000){
+    alert("Image too large (max 2MB)");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    localStorage.setItem("profileImage", reader.result);
+    profilePic.src = reader.result;
+    photoInput.style.display = "none";
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+/* LOGIN */
+function requireLogin(action){
+  if(!user){
+    pendingAction = action;
+    loginModal.style.display = "flex";
+    return;
+  }
+  action();
+}
+
+/* GOOGLE LOGIN */
+window.onload = ()=>{
+  google.accounts.id.initialize({
+    client_id: "YOUR_GOOGLE_CLIENT_ID",
+    callback: res=>{
+      const d = JSON.parse(atob(res.credential.split(".")[1]));
+      user = { id:d.sub, name:d.name };
+      localStorage.setItem("user", JSON.stringify(user));
+      loginModal.style.display = "none";
+      if(pendingAction) pendingAction();
+    }
+  });
+  google.accounts.id.renderButton(
+    document.getElementById("googleBtn"),
+    { theme:"outline", size:"large" }
+  );
+};
+
+/* BLOG */
+function addBlog(){
+  const title = prompt("Blog title");
+  const content = prompt("Blog content");
+  if(!title || !content) return;
+
+  blogs.unshift({
+    id: Date.now(),
+    title,
+    content,
+    date: new Date().toLocaleDateString(),
+    likes: 0
+  });
+  save();
+}
+
+function likeBlog(id){
+  requireLogin(()=>{
+    const key = user.id + "_like_" + id;
+    if(localStorage.getItem(key)) return;
+    blogs.find(b=>b.id===id).likes++;
+    localStorage.setItem(key,"1");
+    save();
+  });
+}
+
+function save(){
+  localStorage.setItem("blogs", JSON.stringify(blogs));
+  render();
+}
+
+function render(){
+  blogsDiv.innerHTML = "";
+  blogs.forEach(b=>{
+    blogsDiv.innerHTML += `
+      <div class="blog">
+        <div class="blog-head">
+          <img src="${profilePic.src}">
+          <div>
+            <b>${b.title}</b>
+            <div class="blog-date">${b.date}</div>
+          </div>
+        </div>
+        <p>${b.content}</p>
+        <div class="actions">
+          <span onclick="likeBlog(${b.id})">❤️ ${b.likes}</span>
+          <span onclick="requireLogin(()=>alert('Comments coming soon'))">💬 Comment</span>
+          <span onclick="requireLogin(()=>alert('Shared'))">🔗 Share</span>
+        </div>
+      </div>`;
+  });
+  entryCount.innerText = blogs.length;
+}
+
+render();
+</script>
+
+</body>
+</html>

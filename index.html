@@ -24,6 +24,7 @@ body{margin:0;font-family:Arial;background:#f4f5f7}
 .blog-head img{width:40px;height:40px;border-radius:8px;margin-right:8px}
 .blog-date{font-size:12px;color:#777}
 .actions{display:flex;justify-content:space-around;margin-top:10px;cursor:pointer}
+.comment{font-size:13px;background:#f1f1f1;padding:6px;border-radius:8px;margin-top:6px}
 #loginModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);justify-content:center;align-items:center;z-index:9999}
 .login-box{background:#fff;padding:20px;border-radius:12px;text-align:center}
 </style>
@@ -40,21 +41,20 @@ body{margin:0;font-family:Arial;background:#f4f5f7}
       <div class="profile-name">Pranit Helge · Blog</div>
       <div class="profile-sub">PranWorld</div>
     </div>
-    <button class="subscribe-btn" onclick="requireLogin(()=>alert('Subscribed!'))">Subscribe</button>
+    <button id="subscribeBtn" class="subscribe-btn" onclick="requireLogin(subscribeUser)">Subscribe</button>
   </div>
 
   <input id="photoInput" type="file" accept="image/*" onchange="uploadProfile(this)">
 
   <div class="stats">
     <div><b id="entryCount">0</b><br>Entries</div>
-    <div><b>0</b><br>Subscribers</div>
+    <div><b id="subCount">0</b><br>Subscribers</div>
   </div>
 </div>
 
 <div class="add-btn" onclick="addBlog()">+ Add Today's Blog</div>
 <div id="blogs"></div>
 
-<!-- LOGIN MODAL -->
 <div id="loginModal">
   <div class="login-box">
     <h3>Login Required</h3>
@@ -64,32 +64,24 @@ body{margin:0;font-family:Arial;background:#f4f5f7}
 </div>
 
 <script>
-/* ELEMENTS */
 const blogsDiv = document.getElementById("blogs");
 const entryCount = document.getElementById("entryCount");
+const subCount = document.getElementById("subCount");
 const profilePic = document.getElementById("profilePic");
 const photoInput = document.getElementById("photoInput");
 const loginModal = document.getElementById("loginModal");
 
-/* DATA */
 let blogs = JSON.parse(localStorage.getItem("blogs")) || [];
 let user = JSON.parse(localStorage.getItem("user"));
 let pendingAction = null;
 
-/* PROFILE IMAGE */
+let subscribers = Number(localStorage.getItem("subscribers")) || 0;
+subCount.innerText = subscribers;
+
 const savedProfile = localStorage.getItem("profileImage");
-if(savedProfile){
-  profilePic.src = savedProfile;
-  photoInput.style.display = "none";
-}else{
-  profilePic.src = "https://via.placeholder.com/60";
-}
+profilePic.src = savedProfile || "https://via.placeholder.com/60";
 
 function uploadProfile(input){
-  if(input.files[0].size > 2_000_000){
-    alert("Image too large (max 2MB)");
-    return;
-  }
   const reader = new FileReader();
   reader.onload = ()=>{
     localStorage.setItem("profileImage", reader.result);
@@ -99,7 +91,6 @@ function uploadProfile(input){
   reader.readAsDataURL(input.files[0]);
 }
 
-/* LOGIN */
 function requireLogin(action){
   if(!user){
     pendingAction = action;
@@ -109,7 +100,6 @@ function requireLogin(action){
   action();
 }
 
-/* GOOGLE LOGIN */
 window.onload = ()=>{
   google.accounts.id.initialize({
     client_id: "220704373458-5b0p5d8c6orqcjv48ks3q83fgq8bhtk1.apps.googleusercontent.com",
@@ -127,7 +117,6 @@ window.onload = ()=>{
   );
 };
 
-/* BLOG */
 function addBlog(){
   const title = prompt("Blog title");
   const content = prompt("Blog content");
@@ -138,17 +127,24 @@ function addBlog(){
     title,
     content,
     date: new Date().toLocaleDateString(),
-    likes: 0
+    likes: 0,
+    comments: []
   });
   save();
 }
 
+function commentBlog(id){
+  requireLogin(()=>{
+    const text = prompt("Write a comment");
+    if(!text) return;
+    blogs.find(b=>b.id===id).comments.push(user.name+": "+text);
+    save();
+  });
+}
+
 function likeBlog(id){
   requireLogin(()=>{
-    const key = user.id + "_like_" + id;
-    if(localStorage.getItem(key)) return;
     blogs.find(b=>b.id===id).likes++;
-    localStorage.setItem(key,"1");
     save();
   });
 }
@@ -159,29 +155,48 @@ function save(){
 }
 
 function render(){
-  blogsDiv.innerHTML = "";
+  blogsDiv.innerHTML="";
   blogs.forEach(b=>{
-    blogsDiv.innerHTML += `
-      <div class="blog">
-        <div class="blog-head">
-          <img src="${profilePic.src}">
-          <div>
-            <b>${b.title}</b>
-            <div class="blog-date">${b.date}</div>
-          </div>
+    blogsDiv.innerHTML+=`
+    <div class="blog">
+      <div class="blog-head">
+        <img src="${profilePic.src}">
+        <div>
+          <b>${b.title}</b>
+          <div class="blog-date">${b.date}</div>
         </div>
-        <p>${b.content}</p>
-        <div class="actions">
-          <span onclick="likeBlog(${b.id})">❤️ ${b.likes}</span>
-          <span onclick="requireLogin(()=>alert('Comments coming soon'))">💬 Comment</span>
-          <span onclick="requireLogin(()=>alert('Shared'))">🔗 Share</span>
-        </div>
-      </div>`;
+      </div>
+      <p>${b.content}</p>
+      <div class="actions">
+        <span onclick="likeBlog(${b.id})">❤️ ${b.likes}</span>
+        <span onclick="commentBlog(${b.id})">💬 Comment</span>
+        <span onclick="alert('Shared')">🔗 Share</span>
+      </div>
+      ${b.comments.map(c=>`<div class="comment">${c}</div>`).join("")}
+    </div>`;
   });
   entryCount.innerText = blogs.length;
 }
 
 render();
+
+/* SUBSCRIBE + COUNT */
+if(localStorage.getItem("subscribed")){
+  const b=document.getElementById("subscribeBtn");
+  b.innerText="Subscribed";b.disabled=true;b.style.opacity="0.6";
+}
+
+function subscribeUser(){
+  if(localStorage.getItem("subscribed")) return;
+
+  localStorage.setItem("subscribed","true");
+  subscribers++;
+  localStorage.setItem("subscribers",subscribers);
+  subCount.innerText=subscribers;
+
+  const b=document.getElementById("subscribeBtn");
+  b.innerText="Subscribed";b.disabled=true;b.style.opacity="0.6";
+}
 </script>
 
 </body>

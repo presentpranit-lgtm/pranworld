@@ -112,7 +112,7 @@ function requireLogin(action){
 /* GOOGLE LOGIN */
 window.onload = ()=>{
   google.accounts.id.initialize({
-    client_id: "YOUR_GOOGLE_CLIENT_ID",
+    client_id: "220704373458-5b0p5d8c6orqcjv48ks3q83fgq8bhtk1.apps.googleusercontent.com",
     callback: res=>{
       const d = JSON.parse(atob(res.credential.split(".")[1]));
       user = { id:d.sub, name:d.name };
